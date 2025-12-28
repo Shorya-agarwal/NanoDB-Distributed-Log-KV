@@ -1,0 +1,26 @@
+# --- C++ Build Artifacts ---
+# Ignore the compiled executable
+src/nanodb
+# Ignore object files (if you use Makefiles later)
+*.o
+*.obj
+# Ignore standard output files
+*.out
+*.exe
+
+# --- Runtime Data (Crucial) ---
+# Never push the database storage file
+*.log
+# Ignore any test output text files
+tests/*.txt
+
+# --- Python ---
+# Ignore compiled python files
+__pycache__/
+*.pyc
+
+# --- OS & IDE Files (Good Practice) ---
+.DS_Store
+.vscode/
+.idea/
+build/
