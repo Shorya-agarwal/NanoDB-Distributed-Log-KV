@@ -1,9 +1,13 @@
-#include "wal_logger.hpp" // Include your new logger
+#include "wal_logger.hpp"
 #include <vector>
 #include <unordered_map>
 #include <shared_mutex>
 #include <string>
 #include <functional>
+
+// A unique string that acts as our "Delete Marker"
+// In a production system, we would use a binary flag, but this is perfect for a prototype.
+const std::string TOMBSTONE = "||__TOMBSTONE__||";
 
 struct Shard {
     std::unordered_map<std::string, std::string> data;
@@ -14,7 +18,7 @@ class ShardedKVStore {
 private:
     std::vector<Shard> shards;
     size_t shard_count;
-    WALLogger logger; // Instance of the logger
+    WALLogger logger; 
 
     size_t get_shard_index(const std::string& key) const {
         std::hash<std::string> hasher;
@@ -22,25 +26,27 @@ private:
     }
 
 public:
-    // Constructor: Initialize shards AND restore data from disk
     ShardedKVStore(size_t count = 16, const std::string& filename = "wal.log") 
         : shard_count(count), shards(count), logger(filename) {
         
-        // RECOVERY STEP
+        // RECOVERY: Replay the log to restore state
         auto entries = logger.read_all_logs();
         for (const auto& entry : entries) {
-            // We use direct access here to avoid double-logging during recovery
             size_t idx = get_shard_index(entry.key);
-            shards[idx].data[entry.key] = entry.value;
+            
+            // IF we see a Tombstone, remove the key from memory
+            if (entry.value == TOMBSTONE) {
+                shards[idx].data.erase(entry.key);
+            } else {
+                shards[idx].data[entry.key] = entry.value;
+            }
         }
-        std::cout << "Recovered " << entries.size() << " records from disk." << std::endl;
+        std::cout << "Recovered " << entries.size() << " log entries from disk." << std::endl;
     }
 
     void put(const std::string& key, const std::string& value) {
-        // 1. Log to Disk FIRST (Durability)
-        logger.log_operation(key, value);
-
-        // 2. Update Memory
+        logger.log_operation(key, value); // Persist
+        
         size_t idx = get_shard_index(key);
         std::unique_lock<std::shared_mutex> lock(shards[idx].mutex);
         shards[idx].data[key] = value;
@@ -56,5 +62,16 @@ public:
             return true;
         }
         return false;
+    }
+
+    // NEW: The Delete Function
+    void del(const std::string& key) {
+        // 1. Log the Tombstone to disk
+        logger.log_operation(key, TOMBSTONE);
+
+        // 2. Remove from Memory
+        size_t idx = get_shard_index(key);
+        std::unique_lock<std::shared_mutex> lock(shards[idx].mutex);
+        shards[idx].data.erase(key);
     }
 };

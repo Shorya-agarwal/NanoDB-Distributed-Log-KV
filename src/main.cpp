@@ -13,6 +13,7 @@ void print_help() {
     std::cout << "Commands:\n"
               << "  PUT <key> <value>   : Insert or update a key-value pair\n"
               << "  GET <key>           : Retrieve a value by key\n"
+              << "  DEL <key>           : Delete a key\n"
               << "  EXIT                : Save and quit\n"
               << "  HELP                : Show this message\n";
 }
@@ -78,6 +79,15 @@ int main() {
                 }
             } else {
                 std::cout << "Error: Usage: GET <key>" << std::endl;
+            }
+        }
+        else if (command == "DEL") {
+            std::string key;
+            if (ss >> key) {
+                db.del(key);
+                std::cout << "OK (Deleted)" << std::endl;
+            } else {
+                std::cout << "Error: Usage: DEL <key>" << std::endl;
             }
         } 
         else {
