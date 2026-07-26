@@ -12,7 +12,7 @@
 
 It's built around the same core ideas as production log-structured storage engines (RocksDB, Cassandra's memtable/SSTable model, Kafka's log): an append-only **Write-Ahead Log** for durability, **checksummed frames** so a crash mid-write can't corrupt recovery, **atomic compaction** to keep the log from growing forever, and **sharded locking** to let independent keys be written concurrently without a single global lock serializing every operation.
 
-Every claim below — the protocol behavior, the corruption recovery, the compaction correctness, the throughput numbers — was independently exercised against the actual binary, not just asserted. See [Testing](#-testing) for exactly what was run and what it showed.
+Every claim below including the protocol behavior, the corruption recovery, the compaction correctness, the throughput numbers was independently exercised against the actual binary, not just asserted. See [Testing](#-testing) for exactly what was run and what it showed.
 
 ## 🚀 Key Features
 
@@ -22,7 +22,7 @@ Every claim below — the protocol behavior, the corruption recovery, the compac
 * **📦 Atomic Log Compaction:** Rewrites the WAL to contain only live keys (dropping historical overwrites and tombstoned deletes), using the write-temp-file → `fsync` → `rename()` pattern — the same technique SSTable-based engines use to guarantee a reader or a crash never observes a half-written compacted file.
 * **⚰️ Tombstone Deletion:** Deletes are recorded as sentinel values in the log rather than requiring in-place file modification, and are correctly resolved away during compaction.
 * **🧪 Real Test Suite:** Integration tests drive the actual TCP/RESP interface (not CLI stdout scraping). A separate concurrency test hammers shared keys from 32 threads to check for lost writes and deadlocks, and a benchmark suite reports real throughput and P50/P95/P99 latency.
-* **🐳 Containerized:** Multi-stage Dockerfile — one command to build and run, ready for free-tier deployment.
+* **🐳 Containerized:** Multi-stage Dockerfile - one command to build and run, ready for free-tier deployment.
 
 ---
 
@@ -54,14 +54,14 @@ graph TD
 A client opens a TCP connection and sends RESP-encoded commands (`SET`, `GET`, `DEL`, `COMPACT`, `DBSIZE`, `PING`). Each connection is handled on its own thread; the server parses the RESP frame, dispatches into `ShardedKVStore`, and writes back a RESP reply (simple string, bulk string, integer, nil, or error) — the same reply types a real Redis server sends.
 
 ### Write path
-1. `WALLogger::log_operation` builds the frame `[KeySize][Key][ValueSize][Value]`, computes a CRC32 over it, writes checksum + frame to the log file, and calls `fsync()` — not just a buffered flush — so the write is durable against a power loss, not only a process crash.
+1. `WALLogger::log_operation` builds the frame `[KeySize][Key][ValueSize][Value]`, computes a CRC32 over it, writes checksum + frame to the log file, and calls `fsync()` not just a buffered flush so the write is durable against a power loss, not only a process crash.
 2. Only after that succeeds does the in-memory shard map get updated, under an exclusive lock scoped to that one shard.
 
 ### Recovery path
 On startup, `read_all_logs()` replays the WAL frame by frame, recomputing each entry's CRC32 and comparing it to the stored value. The first mismatch (or truncated read) stops replay — this is exactly what a torn write from a mid-write crash looks like, and the design treats it as an expected, handled case rather than an error to propagate.
 
 ### Compaction path
-`ShardedKVStore::compact()` locks every shard (always in ascending index order, so it can never deadlock against any other multi-shard operation), snapshots the live key-value pairs, releases the locks, and hands the snapshot to `WALLogger::compact()`, which writes it to `wal.log.compacting`, `fsync`s the file *and* the containing directory, then atomically `rename()`s it over `wal.log`. A crash at any point during this leaves either the old log or the new one intact — never a partial file under the real name.
+`ShardedKVStore::compact()` locks every shard (always in ascending index order, so it can never deadlock against any other multi-shard operation), snapshots the live key-value pairs, releases the locks, and hands the snapshot to `WALLogger::compact()`, which writes it to `wal.log.compacting`, `fsync`s the file *and* the containing directory, then atomically `rename()`s it over `wal.log`. A crash at any point during this leaves either the old log or the new one intact but never a partial file under the real name.
 
 ---
 
@@ -176,11 +176,11 @@ Implements request parsing for RESP arrays of bulk strings (`*N\r\n$len\r\n...`)
 
 ## ☁️ Deployment (Free Tier)
 
-This ships a raw TCP server, which rules out most "free tier" PaaS options — platforms like Render's free tier are HTTP-only and sleep on inactivity, and Fly.io no longer offers a persistent free tier as of 2024. The option that actually fits "always-on daemon on an arbitrary TCP port, for free" is **Oracle Cloud's Always Free tier**: an ARM VM with a real public IP.
+This ships a raw TCP server, which rules out most "free tier" PaaS options  platforms like Render's free tier are HTTP-only and sleep on inactivity, and Fly.io no longer offers a persistent free tier as of 2024. The option that actually fits "always-on daemon on an arbitrary TCP port, for free" is **Oracle Cloud's Always Free tier**: an ARM VM with a real public IP.
 
 ```bash
 # On the VM:
-git clone <this-repo>
+git clone https://github.com/Shorya-agarwal/NanoDB-Distributed-Log-KV
 cd nanodb
 docker build -t nanodb .
 docker run -d -p 6399:6399 -v nanodb-data:/data --restart unless-stopped nanodb
